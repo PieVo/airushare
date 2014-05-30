@@ -20,6 +20,8 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include <upnp/upnp.h>
 #include <upnp/upnptools.h>
 
