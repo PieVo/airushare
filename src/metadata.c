@@ -540,35 +540,43 @@ build_metadata_list (struct ushare_t *ut)
   if (!ut->root_entry)
     ut->root_entry = upnp_entry_new (ut, "root", NULL, NULL, -1, true);
 
-  /* add files from content directory */
-  for (i=0 ; i < ut->contentlist->count ; i++)
+  /* add files from content directory, only add a subfolder when more
+   * than 1 content source is supplied */
+  if (ut->contentlist->count > 1)
   {
-    struct upnp_entry_t *entry = NULL;
-    char *title = NULL;
-    int size = 0;
+	  for (i=0 ; i < ut->contentlist->count ; i++)
+	  {
+		struct upnp_entry_t *entry = NULL;
+		char *title = NULL;
+		int size = 0;
 
-    log_info (_("Looking for files in content directory : %s\n"),
-              ut->contentlist->content[i]);
+		log_info (_("Looking for files in content directory : %s\n"),
+				  ut->contentlist->content[i]);
 
-    size = strlen (ut->contentlist->content[i]);
-    if (ut->contentlist->content[i][size - 1] == '/')
-      ut->contentlist->content[i][size - 1] = '\0';
-    title = strrchr (ut->contentlist->content[i], '/');
-    if (title)
-      title++;
-    else
-    {
-      /* directly use content directory name if no '/' before basename */
-      title = ut->contentlist->content[i];
-    }
+		size = strlen (ut->contentlist->content[i]);
+		if (ut->contentlist->content[i][size - 1] == '/')
+		  ut->contentlist->content[i][size - 1] = '\0';
+		title = strrchr (ut->contentlist->content[i], '/');
+		if (title)
+		  title++;
+		else
+		{
+		  /* directly use content directory name if no '/' before basename */
+		  title = ut->contentlist->content[i];
+		}
 
-    entry = upnp_entry_new (ut, title, ut->contentlist->content[i],
-                            ut->root_entry, -1, true);
+		entry = upnp_entry_new (ut, title, ut->contentlist->content[i],
+								ut->root_entry, -1, true);
 
-    if (!entry)
-      continue;
-    upnp_entry_add_child (ut, ut->root_entry, entry);
-    metadata_add_container (ut, entry, ut->contentlist->content[i]);
+		if (!entry)
+		  continue;
+		upnp_entry_add_child (ut, ut->root_entry, entry);
+		metadata_add_container (ut, entry, ut->contentlist->content[i]);
+	  }
+  }
+  else if (ut->contentlist->count == 1)
+  {
+	  metadata_add_container (ut, ut->root_entry, ut->contentlist->content[0]);
   }
 
   log_info (_("Found %d files and subdirectories.\n"), ut->nr_entries);
