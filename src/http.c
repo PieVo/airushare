@@ -52,7 +52,8 @@ struct web_file_t {
   off_t pos;
   enum {
     FILE_LOCAL,
-    FILE_MEMORY
+    FILE_MEMORY,
+    FILE_PIPE,
   } type;
   union {
     struct {
@@ -149,7 +150,10 @@ int http_get_info (const char *filename, struct File_Info *info)
     info->is_readable = 1;
 
   /* file exist and can be read */
-  info->file_length = st.st_size;
+  if (S_ISFIFO(st.st_mode))
+	  info->file_length = ~0;
+  else
+	  info->file_length = st.st_size;
   info->last_modified = st.st_mtime;
   info->is_directory = S_ISDIR (st.st_mode);
 
@@ -203,6 +207,7 @@ UpnpWebFileHandle http_open (const char *filename, enum UpnpOpenFileMode mode)
   struct upnp_entry_t *entry = NULL;
   struct web_file_t *file;
   int fd, upnp_id = 0;
+  struct stat st;
 
   if (!filename)
     return NULL;
@@ -240,15 +245,25 @@ UpnpWebFileHandle http_open (const char *filename, enum UpnpOpenFileMode mode)
   if (fd < 0)
     return NULL;
 
+  if (fstat (fd, &st) < 0)
+    return NULL;
+
   file = malloc (sizeof (struct web_file_t));
   file->fullpath = strdup (entry->fullpath);
   file->pos = 0;
-  file->type = FILE_LOCAL;
   file->detail.local.entry = entry;
   file->detail.local.fd = fd;
+  if (S_ISFIFO(st.st_mode))
+	  file->type = FILE_PIPE;
+  else
+	  file->type = FILE_LOCAL;
 
   return ((UpnpWebFileHandle) file);
 }
+
+
+#define BUFFERDELAY	(100)	/* Buffersize is ms */
+#define BUFFERSIZE	((44100 * 2 * 2) / (1000 / BUFFERDELAY))
 
 int http_read (UpnpWebFileHandle fh, char *buf, size_t buflen)
 {
@@ -271,6 +286,11 @@ int http_read (UpnpWebFileHandle fh, char *buf, size_t buflen)
     len = (size_t) MIN (buflen, file->detail.memory.len - file->pos);
     memcpy (buf, file->detail.memory.contents + file->pos, (size_t) len);
     break;
+  case FILE_PIPE:
+	log_verbose ("Read %d from pipe.\n", BUFFERSIZE);
+	usleep(BUFFERDELAY * 1000 );
+	len = read (file->detail.local.fd, buf, BUFFERSIZE);
+	break;
   default:
     log_verbose ("Unknown file type.\n");
     break;
@@ -360,6 +380,10 @@ int http_seek (UpnpWebFileHandle fh, off_t offset, int origin)
       return -1;
     }
     break;
+  case FILE_PIPE:
+	  log_verbose ("%s: cannot seek in pipe: %s\n", file->fullpath, strerror (EINVAL));
+	  return -1;
+	  break;
   }
 
   file->pos = newpos;
