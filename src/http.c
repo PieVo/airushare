@@ -68,6 +68,40 @@ struct web_file_t {
 };
 
 
+typedef struct wave_header
+{
+  unsigned char  id[4];          // should always contain "RIFF"
+  unsigned int   totallength;    // total file length minus 8
+  unsigned char  wavefmt[8];     // should be "WAVEfmt "
+  unsigned int   format;         // 16 for PCM format
+  unsigned short pcm;            // 1 for PCM format
+  unsigned short channels;       // channels
+  unsigned int   frequency;      // sampling frequency
+  unsigned int   bytes_per_second;
+  unsigned short bytes_by_capture;
+  unsigned short bits_per_sample;
+  unsigned char  data[4];        // should always contain "data"
+  unsigned int   bytes_in_data;
+}__attribute__((__packed__)) wavfile_t;
+
+wavfile_t wavhdr = {
+  "RIFF",
+  (2048*1024*1024) - 9,
+  "WAVEfmt ",
+  16,
+  1,
+  2,
+  44100,
+  176400,
+  4,
+  16,
+  "data",
+  (2048*1024*1024) - 1,
+};
+
+#define BUFFERDELAY	(100)	/* Buffersize is ms */
+#define BUFFERSIZE	((44100 * 2 * 2) / (1000 / BUFFERDELAY))
+
 static inline void
 set_info_file (struct File_Info *info, const size_t length,
                const char *content_type)
@@ -261,10 +295,6 @@ UpnpWebFileHandle http_open (const char *filename, enum UpnpOpenFileMode mode)
   return ((UpnpWebFileHandle) file);
 }
 
-
-#define BUFFERDELAY	(100)	/* Buffersize is ms */
-#define BUFFERSIZE	((44100 * 2 * 2) / (1000 / BUFFERDELAY))
-
 int http_read (UpnpWebFileHandle fh, char *buf, size_t buflen)
 {
   struct web_file_t *file = (struct web_file_t *) fh;
@@ -287,9 +317,18 @@ int http_read (UpnpWebFileHandle fh, char *buf, size_t buflen)
     memcpy (buf, file->detail.memory.contents + file->pos, (size_t) len);
     break;
   case FILE_PIPE:
-	log_verbose ("Read %d from pipe.\n", BUFFERSIZE);
-	usleep(BUFFERDELAY * 1000 );
-	len = read (file->detail.local.fd, buf, BUFFERSIZE);
+	if (file->pos > 0)
+	{
+	  log_verbose ("Read %d from pipe.\n", BUFFERSIZE);
+	  usleep(BUFFERDELAY * 1000 );
+	  len = read (file->detail.local.fd, buf, BUFFERSIZE);
+	}
+	else
+	{
+	  log_verbose ("Sending WAVE header\n");
+	  memcpy(buf, &wavhdr, sizeof(wavhdr));
+	  len = sizeof(wavhdr);
+	}
 	break;
   default:
     log_verbose ("Unknown file type.\n");
@@ -298,6 +337,12 @@ int http_read (UpnpWebFileHandle fh, char *buf, size_t buflen)
 
   if (len >= 0)
     file->pos += len;
+
+  if (file->pos > wavhdr.totallength)
+  {
+	  log_verbose ("Looping\n");
+	  file->pos = 0;
+  }
 
   log_verbose ("Read %zd bytes.\n", len);
 
@@ -403,6 +448,7 @@ int http_close (UpnpWebFileHandle fh)
   switch (file->type)
   {
   case FILE_LOCAL:
+  case FILE_PIPE:
     close (file->detail.local.fd);
     break;
   case FILE_MEMORY:
