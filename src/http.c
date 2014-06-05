@@ -43,6 +43,7 @@
 #include "presentation.h"
 #include "osdep.h"
 #include "mime.h"
+#include "rttimer.h"
 
 #define PROTOCOL_TYPE_PRE_SZ  11   /* for the str length of "http-get:*:" */
 #define PROTOCOL_TYPE_SUFF_SZ 2    /* for the str length of ":*" */
@@ -287,8 +288,10 @@ UpnpWebFileHandle http_open (const char *filename, enum UpnpOpenFileMode mode)
   file->pos = 0;
   file->detail.local.entry = entry;
   file->detail.local.fd = fd;
-  if (S_ISFIFO(st.st_mode))
+  if (S_ISFIFO(st.st_mode)) {
 	  file->type = FILE_PIPE;
+	  timer_setup();
+  }
   else
 	  file->type = FILE_LOCAL;
 
@@ -299,6 +302,7 @@ int http_read (UpnpWebFileHandle fh, char *buf, size_t buflen)
 {
   struct web_file_t *file = (struct web_file_t *) fh;
   ssize_t len = -1;
+  int timer = 0;
 
   log_verbose ("http_read\n");
 
@@ -319,9 +323,8 @@ int http_read (UpnpWebFileHandle fh, char *buf, size_t buflen)
   case FILE_PIPE:
 	if (file->pos > 0)
 	{
-	  log_verbose ("Read %d from pipe.\n", BUFFERSIZE);
-	  usleep(BUFFERDELAY * 1000 );
-	  len = read (file->detail.local.fd, buf, BUFFERSIZE);
+      timer_wait_for_tick();
+	  len = read (file->detail.local.fd, buf, BYTES_PER_TICK);
 	}
 	else
 	{
@@ -337,12 +340,6 @@ int http_read (UpnpWebFileHandle fh, char *buf, size_t buflen)
 
   if (len >= 0)
     file->pos += len;
-
-  if (file->pos > wavhdr.totallength)
-  {
-	  log_verbose ("Looping\n");
-	  file->pos = 0;
-  }
 
   log_verbose ("Read %zd bytes.\n", len);
 
@@ -447,8 +444,9 @@ int http_close (UpnpWebFileHandle fh)
 
   switch (file->type)
   {
-  case FILE_LOCAL:
   case FILE_PIPE:
+	timer_remove();
+  case FILE_LOCAL:
     close (file->detail.local.fd);
     break;
   case FILE_MEMORY:

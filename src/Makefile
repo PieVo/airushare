@@ -25,6 +25,7 @@ EXTRADIST = ushare.1 \
 	ushare.h \
 	gettext.h \
 	minmax.h \
+	rttimer.h \
 
 
 SRCS = \
@@ -41,7 +42,8 @@ SRCS = \
         content.c \
         cfgparser.c \
         trace.c \
-        redblack.c \
+        rttimer.c \
+	redblack.c \
         osdep.c \
         ctrl_telnet.c \
         ushare.c

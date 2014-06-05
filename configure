@@ -640,7 +640,7 @@ check_lib upnp/ixml.h ixmlRelaxParser -lixml || die "Error, can't find libixml !
 
 echolog "Checking for libthreadutil ..."
 check_lib upnp/ThreadPool.h ThreadPoolAdd "-lthreadutil -lpthread" || die "Error, can't find libthreadutil !"
-add_extralibs -lpthread
+add_extralibs -lpthread -lrt
 
 libupnp_min_version="1.4.2"
 echolog "Checking for libupnp >= $libupnp_min_version ..."
